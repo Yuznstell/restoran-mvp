@@ -12,6 +12,35 @@ export default function Checkout() {
       setCart(parsed);
       setTotal(parsed.reduce((sum, item) => sum + item.price, 0));
     }
+const handlePay = async () => {
+  setLoading(true);
+
+  const res = await fetch("/api/transaction", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      orderId: "ORDER-" + Date.now(),
+      grossAmount: 10000,
+      customerName: "Budi",
+      email: "budi@example.com",
+      phone: "08123456789",
+    }),
+  });
+
+  const data = await res.json();
+  setLoading(false);
+
+  if (data.token && window.snap) {
+    window.snap.pay(data.token, {
+      onSuccess: (result) => console.log("success", result),
+      onPending: (result) => console.log("pending", result),
+      onError: (result) => console.log("error", result),
+      onClose: () => alert("Popup ditutup sebelum selesai"),
+    });
+  } else {
+    alert("Token gagal diambil atau Snap.js belum siap");
+  }
+};
 
     // Inject Snap.js
     const script = document.createElement("script");
