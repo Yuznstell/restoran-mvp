@@ -18,9 +18,9 @@ export default async function handler(req, res) {
     const body = req.body;
     console.log("📩 Notifikasi dari Midtrans:", body);
 
-    const { order_id, status_code, gross_amount, signature_key, transaction_status } = body;
+    const { order_id, status_code, gross_amount, signature_key } = body;
 
-    // --- Normalisasi gross_amount (hapus koma, ubah ke string)
+    // --- Normalisasi gross_amount ---
     const cleanAmount = String(gross_amount).replace(/[,\.]/g, "");
 
     // --- Validasi Signature ---
@@ -34,7 +34,7 @@ export default async function handler(req, res) {
       return res.status(401).json({ message: "Invalid signature" });
     }
 
-    // --- Gunakan Core API, bukan Snap
+    // --- Core API untuk ambil status transaksi ---
     const coreApi = new midtransClient.CoreApi({
       isProduction: false,
       serverKey: process.env.MIDTRANS_SERVER_KEY,
@@ -44,12 +44,33 @@ export default async function handler(req, res) {
     const statusResponse = await coreApi.transaction.status(order_id);
     console.log("🔎 Status Transaksi:", statusResponse);
 
+    const { transaction_status, fraud_status } = statusResponse;
+
     // --- Simpan/Update ke Supabase ---
     await supabase.from("transactions").upsert({
-      order_id: order_id,
+      order_id,
       amount: parseInt(cleanAmount, 10),
       status: transaction_status,
     });
+
+    // --- Logging status ---
+    if (transaction_status === "capture") {
+      if (fraud_status === "challenge") {
+        console.log(`⚠️ Order ${order_id} butuh verifikasi manual`);
+      } else if (fraud_status === "accept") {
+        console.log(`✅ Order ${order_id} berhasil dibayar`);
+      }
+    } else if (transaction_status === "settlement") {
+      console.log(`✅ Order ${order_id} sudah settle`);
+    } else if (transaction_status === "pending") {
+      console.log(`⏳ Order ${order_id} masih pending`);
+    } else if (transaction_status === "deny") {
+      console.log(`❌ Order ${order_id} ditolak`);
+    } else if (transaction_status === "expire") {
+      console.log(`⌛ Order ${order_id} expired`);
+    } else if (transaction_status === "cancel") {
+      console.log(`🛑 Order ${order_id} dibatalkan`);
+    }
 
     return res.status(200).json({ message: "OK" });
   } catch (err) {
