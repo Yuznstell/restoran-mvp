@@ -1,49 +1,47 @@
-import { useState, useEffect } from 'react'
-import { supabase } from '../lib/supabase'
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabase";
 
 // Ambil data produk dari Supabase
 export async function getServerSideProps() {
-  const { data: products, error } = await supabase.from('products').select('*')
+  const { data: products, error } = await supabase.from("products").select("*");
   if (error) {
-    console.error(error)
+    console.error(error);
   }
   return {
     props: {
-      products: products || []
-    }
-  }
+      products: products || [],
+    },
+  };
 }
 
 export default function Home({ products }) {
-  const [cart, setCart] = useState([])
+  const [cart, setCart] = useState([]);
 
-  // Ambil keranjang dari localStorage saat reload
   useEffect(() => {
-    const savedCart = localStorage.getItem('cart')
+    const savedCart = localStorage.getItem("cart");
     if (savedCart) {
-      setCart(JSON.parse(savedCart))
+      setCart(JSON.parse(savedCart));
     }
-  }, [])
+  }, []);
 
-  // Tambah produk ke keranjang
   const addToCart = (product) => {
-    const newCart = [...cart, product]
-    setCart(newCart)
-    localStorage.setItem('cart', JSON.stringify(newCart))
-  }
+    const newCart = [...cart, product];
+    setCart(newCart);
+    localStorage.setItem("cart", JSON.stringify(newCart));
+  };
 
   return (
-    <div style={{ padding: 20, fontFamily: 'sans-serif' }}>
-      <h1>🍽️ Menu Restoran</h1>
+    <div style={{ padding: 20, fontFamily: "sans-serif" }}>
+      <h1>🍽️ Menu RestoAI</h1>
 
       {/* Daftar Produk */}
-      <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+      <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
         {products.length > 0 ? (
           products.map((p) => (
             <div
               key={p.id}
               style={{
-                border: '1px solid #ddd',
+                border: "1px solid #ddd",
                 padding: 15,
                 borderRadius: 10,
                 width: 200,
@@ -65,12 +63,12 @@ export default function Home({ products }) {
                 onClick={() => addToCart(p)}
                 style={{
                   marginTop: 10,
-                  padding: '5px 10px',
+                  padding: "5px 10px",
                   borderRadius: 5,
-                  background: '#0070f3',
-                  color: '#fff',
-                  border: 'none',
-                  cursor: 'pointer',
+                  background: "#0070f3",
+                  color: "#fff",
+                  border: "none",
+                  cursor: "pointer",
                 }}
               >
                 + Add to Cart
@@ -95,17 +93,16 @@ export default function Home({ products }) {
               ))}
             </ul>
 
-            {/* Tombol Checkout */}
             <button
-              onClick={() => (window.location.href = '/checkout')}
+              onClick={() => (window.location.href = "/checkout")}
               style={{
                 marginTop: 20,
-                padding: '10px 20px',
+                padding: "10px 20px",
                 borderRadius: 5,
-                background: 'green',
-                color: '#fff',
-                border: 'none',
-                cursor: 'pointer',
+                background: "green",
+                color: "#fff",
+                border: "none",
+                cursor: "pointer",
               }}
             >
               Lanjut ke Checkout
@@ -116,5 +113,5 @@ export default function Home({ products }) {
         )}
       </div>
     </div>
-  )
+  );
 }

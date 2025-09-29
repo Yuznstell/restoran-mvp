@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 export default function Checkout() {
   const [cart, setCart] = useState([]);
   const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     const savedCart = localStorage.getItem("cart");
@@ -12,58 +13,55 @@ export default function Checkout() {
       setTotal(parsed.reduce((sum, item) => sum + item.price, 0));
     }
 
-    // Inject Midtrans Snap.js sekali saja
+    // Inject Snap.js
     const script = document.createElement("script");
     script.src = "https://app.sandbox.midtrans.com/snap/snap.js";
-    script.setAttribute("data-client-key", process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY);
+    script.setAttribute(
+      "data-client-key",
+      process.env.NEXT_PUBLIC_MIDTRANS_CLIENT_KEY
+    );
     document.body.appendChild(script);
 
     return () => {
-      document.body.removeChild(script); // cleanup biar gak double
+      document.body.removeChild(script);
     };
   }, []);
 
-  const handlePayment = async () => {
-    try {
-      const res = await fetch("/api/transaction", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          orderId: "ORDER-" + Date.now(),
-          grossAmount: total,
-          customerName: "Customer Demo",
-          email: "demo@example.com",
-          phone: "08123456789",
-        }),
+  const handlePay = async () => {
+    setLoading(true);
+
+    const res = await fetch("/api/transaction", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        orderId: "ORDER-" + Date.now(),
+        grossAmount: total,
+        customerName: "Customer Demo",
+        email: "demo@example.com",
+        phone: "08123456789",
+      }),
+    });
+
+    const data = await res.json();
+    setLoading(false);
+
+    if (data.token && window.snap) {
+      window.snap.pay(data.token, {
+        onSuccess: (result) => {
+          console.log("✅ Success:", result);
+        },
+        onPending: (result) => {
+          console.log("⏳ Pending:", result);
+        },
+        onError: (result) => {
+          console.log("❌ Error:", result);
+        },
+        onClose: () => {
+          alert("❌ Popup ditutup tanpa pembayaran");
+        },
       });
-
-      const data = await res.json();
-      console.log("🔎 Response API:", data);
-
-      if (res.ok && data.token) {
-        window.snap.pay(data.token, {
-          onSuccess: (result) => {
-            console.log("✅ Sukses:", result);
-            alert("Pembayaran berhasil!");
-          },
-          onPending: (result) => {
-            console.log("⏳ Pending:", result);
-            alert("Pembayaran pending, cek status nanti.");
-          },
-          onError: (result) => {
-            console.error("❌ Error:", result);
-            alert("Terjadi kesalahan pembayaran.");
-          },
-          onClose: () => {
-            console.warn("⚠️ Popup ditutup sebelum selesai.");
-          },
-        });
-      } else {
-        alert("❌ Gagal ambil token");
-      }
-    } catch (err) {
-      console.error("🔥 Fatal:", err);
-      alert("Error: " + err.message);
+    } else {
+      alert("Token gagal diambil atau Snap.js belum siap");
     }
   };
 
@@ -75,13 +73,15 @@ export default function Checkout() {
           <ul>
             {cart.map((item, idx) => (
               <li key={idx}>
-                {item.name} - Rp {item.price.toLocaleString("id-ID")}
+                {item.name} - Rp {item.price}
               </li>
             ))}
           </ul>
           <h2>Total: Rp {total.toLocaleString("id-ID")}</h2>
+
           <button
-            onClick={handlePayment}
+            onClick={handlePay}
+            disabled={loading}
             style={{
               marginTop: 20,
               padding: "10px 20px",
@@ -92,7 +92,7 @@ export default function Checkout() {
               cursor: "pointer",
             }}
           >
-            Bayar Sekarang
+            {loading ? "Processing..." : "Bayar Sekarang"}
           </button>
         </div>
       ) : (

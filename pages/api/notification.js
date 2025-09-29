@@ -1,4 +1,13 @@
+// pages/api/notification.js
 import midtransClient from "midtrans-client";
+import { createClient } from "@supabase/supabase-js";
+import crypto from "crypto";
+
+// ✅ Supabase Client
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
+);
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -6,27 +15,43 @@ export default async function handler(req, res) {
   }
 
   try {
-    const notification = req.body;
-    console.log("📩 Notifikasi dari Midtrans:", notification);
+    const body = req.body;
+    console.log("📩 Notifikasi dari Midtrans:", body);
 
-    // Buat instance Midtrans Notification
-    let apiClient = new midtransClient.Snap({
+    // --- Validasi Signature ---
+    const { order_id, status_code, gross_amount, signature_key, transaction_status } = body;
+
+    const expectedSignature = crypto
+      .createHash("sha512")
+      .update(order_id + status_code + gross_amount + process.env.MIDTRANS_SERVER_KEY)
+      .digest("hex");
+
+    if (signature_key !== expectedSignature) {
+      console.error("❌ Signature tidak valid!");
+      return res.status(400).json({ message: "Invalid signature" });
+    }
+
+    // --- Dapatkan detail status transaksi dari Midtrans ---
+    const apiClient = new midtransClient.Snap({
       isProduction: false,
       serverKey: process.env.MIDTRANS_SERVER_KEY,
     });
 
-    const statusResponse = await apiClient.transaction.notification(notification);
-
+    const statusResponse = await apiClient.transaction.notification(body);
     console.log("🔎 Status Transaksi:", statusResponse);
 
     const orderId = statusResponse.order_id;
     const transactionStatus = statusResponse.transaction_status;
     const fraudStatus = statusResponse.fraud_status;
 
-    // 👉 TODO: Simpan ke database (contoh: Supabase/Mongo/Postgres)
-    // misalnya update status transaksi berdasarkan orderId
-    // await db.transactions.update({ orderId }, { status: transactionStatus });
+    // --- Simpan/Update ke Supabase ---
+    await supabase.from("transactions").upsert({
+      order_id: orderId,
+      amount: parseInt(gross_amount, 10),
+      status: transactionStatus,
+    });
 
+    // --- Logging status ---
     if (transactionStatus === "capture") {
       if (fraudStatus === "challenge") {
         console.log(`⚠️ Order ${orderId} butuh verifikasi manual`);
@@ -51,43 +76,3 @@ export default async function handler(req, res) {
     return res.status(500).json({ message: "Internal Server Error", error: err.message });
   }
 }
-
-import { createClient } from "@supabase/supabase-js";
-import crypto from "crypto";
-
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
-export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).json({ message: "Method Not Allowed" });
-
-  try {
-    const body = req.body;
-
-    const { order_id, status_code, gross_amount, signature_key, transaction_status } = body;
-
-    // Validasi signature (supaya yakin ini dari Midtrans, bukan orang iseng)
-    const expected = crypto
-      .createHash("sha512")
-      .update(order_id + status_code + gross_amount + process.env.MIDTRANS_SERVER_KEY)
-      .digest("hex");
-
-    if (signature_key !== expected) {
-      return res.status(400).json({ message: "Invalid signature" });
-    }
-
-    // Update status di Supabase
-    await supabase.from("transactions").upsert({
-      order_id: order_id,
-      amount: parseInt(gross_amount, 10),
-      status: transaction_status,
-    });
-
-    res.status(200).json({ message: "OK" });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-}
-
